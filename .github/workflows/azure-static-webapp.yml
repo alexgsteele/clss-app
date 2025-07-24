@@ -1,0 +1,60 @@
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  DeployToAzure:
+    name: Deploy to Azure Static Web App
+    runs-on: ubuntu-latest
+    environment:
+      name: CLSS Prod
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Unzip clss_deployment.zip
+        run: |
+          unzip -q clss_deployment.zip
+      
+      - name: Install Node.js Dependencies #installing node dependencies listed in package.json
+        run: npm install --legacy-peer-deps
+        working-directory: clss_deployment
+
+      - name: Update config.json with secret variables
+        env:
+          ARCGIS_PORTAL_URL: ${{ vars.ARCGIS_PORTAL_URL }}
+          ARCGIS_USERNAME: ${{ secrets.ARCGIS_USERNAME }}
+          ARCGIS_PASSWORD: ${{ secrets.ARCGIS_PASSWORD }}
+          CLSS_DOMAIN_URL: ${{ vars.CLSS_DOMAIN_URL }}
+          ARCGIS_OBJECT_SUFFIX: ${{ vars.ARCGIS_OBJECT_SUFFIX }}
+        run: |
+          sed -i "s|\"portalUrl\": \".*\"|\"portalUrl\": \"$ARCGIS_PORTAL_URL\"|g" clss_deployment/config.json
+          sed -i "s|\"username\": \".*\"|\"username\": \"$ARCGIS_USERNAME\"|g" clss_deployment/config.json
+          sed -i "s|\"password\": \".*\"|\"password\": \"$ARCGIS_PASSWORD\"|g" clss_deployment/config.json
+          sed -i "s|\"appUrl\": \".*\"|\"appUrl\": \"$CLSS_DOMAIN_URL\"|g" clss_deployment/config.json
+          sed -i "s|\"environment\": \".*\"|\"environment\": \"$ARCGIS_OBJECT_SUFFIX\"|g" clss_deployment/config.json
+
+      - name: Run deployment script
+        run: |
+          if [[ ${{ github.ref }} == 'refs/heads/main' ]]; then
+            node deploy.js
+          fi
+        working-directory: clss_deployment
+
+      - name: Deploy app to azure static web app
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload" # Action
+          app_location: "/clss_deployment/app" # App source code path
+          api_location: "" # Api source code path - optional
+          output_location: "app" # Built app content directory - optional
+          production_branch: "main"
+          skip_app_build: true
+          skip_api_build: true
+
+    ###### End of Repository/Build Configurations  ######
